@@ -1,0 +1,75 @@
+{
+  "Comment": "Employee ETL Workflow with SNS Failure Alerts",
+  "StartAt": "StartCrawler",
+  "States": {
+    "StartCrawler": {
+      "Type": "Task",
+      "Arguments": {
+        "Name": "bookmark-employee-crawler"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+      "Next": "Wait for crawler completion"
+    },
+    "Wait for crawler completion": {
+      "Type": "Wait",
+      "Seconds": 180,
+      "Next": "Run glue ETL Job"
+    },
+    "Run glue ETL Job": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun.sync",
+      "Arguments": {
+        "JobName": "bookmark-etl-job"
+      },
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Send Failure Notification"
+        }
+      ],
+      "Next": "StartCrawler (1)"
+    },
+    "StartCrawler (1)": {
+      "Type": "Task",
+      "Arguments": {
+        "Name": "snowflake_conn"
+      },
+      "Resource": "arn:aws:states:::aws-sdk:glue:startCrawler",
+      "Next": "Wait for crawler (1) completion"
+    },
+    "Wait for crawler (1) completion": {
+      "Type": "Wait",
+      "Seconds": 180,
+      "Next": "Glue StartJobRun"
+    },
+    "Glue StartJobRun": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::glue:startJobRun",
+      "Arguments": {
+        "JobName": "s3_to_snowflake_job"
+      },
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "Next": "Send Failure Notification"
+        }
+      ],
+      "End": true
+    },
+    "Send Failure Notification": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::sns:publish",
+      "Arguments": {
+        "TopicArn": "arn:aws:sns:ap-south-2:579097996431:sns-failure",
+        "Subject": "Glue ETL Job Failed",
+        "Message": "Employee ETL Pipeline Failed in Glue Job"
+      },
+      "End": true
+    }
+  },
+  "QueryLanguage": "JSONata"
+}
